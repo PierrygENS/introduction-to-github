@@ -1,0 +1,565 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Sun Dec  8 13:48:21 2024
+
+@author: pierr
+"""
+
+# %% importation
+from pyomeca import Markers as py
+import os
+import matplotlib.pyplot as plt
+import numpy as np
+from scipy.signal import butter, filtfilt 
+
+
+#%% fonctions
+# pour avoir l'angle en radiant à  partir 2 vecteurs
+def angle_radiant(v1,v2): 
+    ps = (v1[0]*v2[0])+(v1[1]*v2[1])+(v1[2]*v2[2]) # produit scalaire des 2 vecteur > v1@v2 mais manuellement pour toute les lignes
+    n1 = np.sqrt((v1[0]*v1[0])+(v1[1]*v1[1])+(v1[2]*v1[2])) # normes > np.sqrt(v1@v1) mais manuellement
+    n2 = np.sqrt((v2[0]*v2[0])+(v2[1]*v2[1])+(v2[2]*v2[2]))
+    return np.arccos(ps/(n1*n2))
+
+# filtrage des données
+def butter_lowpass(cutoff, fs, order=2):
+    nyquist = 0.5 * fs  # Nyquist frequency
+    normal_cutoff = cutoff / nyquist  # Normalize cutoff frequency
+    b, a = butter(order, normal_cutoff, btype='low', analog=False)
+    return b, a
+
+def lowpass_filter(data, cutoff, fs, order=2):
+    b, a = butter_lowpass(cutoff, fs, order=order)
+    y = filtfilt(b, a, data)
+    return y
+
+# %% debut : trouver les fichiers
+WRK_PATH = r"C:\Users\pierr\OneDrive\Documents\Mesfichiers\ENS\S1\SVS\TPBiomeca\Python\donneesQTM"
+
+os.chdir(WRK_PATH)
+
+print("Répertoire de travail actuel :", os.getcwd())
+
+DAT_PATH = os.path.join(WRK_PATH)
+
+print(f"Répertoire des données : {DAT_PATH}")
+
+participant_id = "S001JuPe" #nom participant
+
+trialstr_CPNE = "Rol_noeyes" # CPNE = Controle Posturale avec variables No Eyes
+trialstr_CP = "Rol_open_eyes" # CP = Controle Postural variable référence (yeux ouverts)
+
+
+file_path_CPNE = os.path.join(DAT_PATH, f"{participant_id}_{trialstr_CPNE}.c3d")
+file_path_CP = os.path.join(DAT_PATH, f"{participant_id}_{trialstr_CP}.c3d")
+
+
+# %% Prendre données des fichiers
+# rep = py.from_c3d(file_path_tmp)
+
+rep_CPNE = py.from_c3d(file_path_CPNE) 
+rep_CP = py.from_c3d(file_path_CP)
+
+# %% Info base
+#CPNE
+temps_capture_CPNE = (rep_CPNE.attrs['last_frame']- rep_CPNE.attrs['first_frame'])/ rep_CPNE.attrs['rate']
+fréquence_CPNE = rep_CPNE.attrs['rate']
+time_CPNE = np.array(rep_CPNE.time)
+
+rep_mklist_CPNE = np.array(rep_CPNE.channel) # accÃ¨s liste markers
+rep_mklist_CPNE
+len(rep_mklist_CPNE) # nb markers
+
+# CP
+temps_capture_CP = (rep_CP.attrs['last_frame']- rep_CP.attrs['first_frame'])/ rep_CP.attrs['rate']
+fréquence_CP = rep_CP.attrs['rate']
+time_CP = np.array(rep_CP.time)
+
+rep_mklist_CP = np.array(rep_CP.channel) # accÃ¨s liste markers
+rep_mklist_CP
+len(rep_mklist_CP) # nb markers
+
+#%% dÃ©but et fin comparaison
+#Extraction donnÃ©e talon > point de repÃ¨re dÃ©but mvt 
+rhee_CPNE = np.array(rep_CPNE.sel(channel='RHEE', axis=['x','y','z']))
+rhee_CP = np.array(rep_CP.sel(channel='RHEE', axis=['x','y','z']))
+
+# début et fin quand le talon droit dÃ©passe une certaine hauteur (monte sur bosu)
+    # ajoute et enlÃ¨ve 50 pour le temps que met le pied a redescendre sur bosu et se stabiliser 
+h_rhee_threshold = 300 #> limite quand talon dÃ©passe 30cm du sol
+first_index_CPNE = (np.where(rhee_CPNE[2] > h_rhee_threshold)[0][0])+50
+first_index_CP = (np.where(rhee_CP[2] > h_rhee_threshold)[0][0]) + 50
+last_index_CPNE = (np.where(rhee_CPNE[2] > h_rhee_threshold)[-1][-1]) - 50
+last_index_CP = (np.where(rhee_CP[2] > h_rhee_threshold)[-1][-1]) - 50
+
+#%% filtrer donnée
+# filtrer directement sur rep pour avoir tous markers filtrer
+cutoff = 10  # Cutoff frequency
+order = 2
+
+rep_CPNE = rep_CPNE.meca.low_pass(order, cutoff, fréquence_CPNE)
+rep_CP = rep_CP.meca.low_pass(order, cutoff, fréquence_CP)
+#%% Extraire donnée markers
+
+# Récupération Markers CPNE
+Rwra_CPNE = np.array(rep_CPNE.sel(channel='RWRA', axis=['x','y','z']))[:,first_index_CPNE:last_index_CPNE]
+Rrad_CPNE = np.array(rep_CPNE.sel(channel='RRAD', axis=['x','y','z']))[:,first_index_CPNE:last_index_CPNE]
+Rsho_CPNE = np.array(rep_CPNE.sel(channel='RSHO', axis=['x','y','z']))[:,first_index_CPNE:last_index_CPNE]
+Lwra_CPNE = np.array(rep_CPNE.sel(channel='LWRA', axis=['x','y','z']))[:,first_index_CPNE:last_index_CPNE]
+Lrad_CPNE = np.array(rep_CPNE.sel(channel='LRAD', axis=['x','y','z']))[:,first_index_CPNE:last_index_CPNE]
+Lsho_CPNE = np.array(rep_CPNE.sel(channel='LSHO', axis=['x','y','z']))[:,first_index_CPNE:last_index_CPNE]
+Rwrb_CPNE = np.array(rep_CPNE.sel(channel='RWRB', axis=['x','y','z']))[:,first_index_CPNE:last_index_CPNE]
+Rhum_CPNE = np.array(rep_CPNE.sel(channel='RHUM', axis=['x','y','z']))[:,first_index_CPNE:last_index_CPNE]
+Lwrb_CPNE = np.array(rep_CPNE.sel(channel='LWRB', axis=['x','y','z']))[:,first_index_CPNE:last_index_CPNE]
+Lhum_CPNE = np.array(rep_CPNE.sel(channel='LHUM', axis=['x','y','z']))[:,first_index_CPNE:last_index_CPNE]
+C7_CPNE = np.array(rep_CPNE.sel(channel='C7', axis=['x','y','z']))[:,first_index_CPNE:last_index_CPNE]
+Clav_CPNE = np.array(rep_CPNE.sel(channel='CLAV', axis=['x','y','z']))[:,first_index_CPNE:last_index_CPNE]
+Rfwt_CPNE = np.array(rep_CPNE.sel(channel='RFWT', axis=['x','y','z']))[:,first_index_CPNE:last_index_CPNE]
+Lfwt_CPNE = np.array(rep_CPNE.sel(channel='LFWT', axis=['x','y','z']))[:,first_index_CPNE:last_index_CPNE]
+Lbwt_CPNE = np.array(rep_CPNE.sel(channel='LBWT', axis=['x','y','z']))[:,first_index_CPNE:last_index_CPNE]
+Rbwt_CPNE = np.array(rep_CPNE.sel(channel='RBWT', axis=['x','y','z']))[:,first_index_CPNE:last_index_CPNE]
+Rkne_CPNE = np.array(rep_CPNE.sel(channel='RKNE', axis=['x','y','z']))[:,first_index_CPNE:last_index_CPNE]
+Rkni_CPNE = np.array(rep_CPNE.sel(channel='RKNI', axis=['x','y','z']))[:,first_index_CPNE:last_index_CPNE]
+Lkni_CPNE = np.array(rep_CPNE.sel(channel='LKNI', axis=['x','y','z']))[:,first_index_CPNE:last_index_CPNE]
+Lkne_CPNE = np.array(rep_CPNE.sel(channel='LKNE', axis=['x','y','z']))[:,first_index_CPNE:last_index_CPNE]
+Rane_CPNE = np.array(rep_CPNE.sel(channel='RANE', axis=['x','y','z']))[:,first_index_CPNE:last_index_CPNE]
+Lane_CPNE = np.array(rep_CPNE.sel(channel='LANE', axis=['x','y','z']))[:,first_index_CPNE:last_index_CPNE]
+Rfhd_CPNE = np.array(rep_CPNE.sel(channel='RFHD', axis=['x','y','z']))[:,first_index_CPNE:last_index_CPNE]
+Lfhd_CPNE = np.array(rep_CPNE.sel(channel='LFHD', axis=['x','y','z']))[:,first_index_CPNE:last_index_CPNE]
+Lbhd_CPNE = np.array(rep_CPNE.sel(channel='LBHD', axis=['x','y','z']))[:,first_index_CPNE:last_index_CPNE]
+Rbhd_CPNE = np.array(rep_CPNE.sel(channel='RBHD', axis=['x','y','z']))[:,first_index_CPNE:last_index_CPNE]
+Rtoe_CPNE = np.array(rep_CPNE.sel(channel='RTOE', axis=['x','y','z']))[:,first_index_CPNE:last_index_CPNE]
+Ltoe_CPNE = np.array(rep_CPNE.sel(channel='LTOE', axis=['x','y','z']))[:,first_index_CPNE:last_index_CPNE]
+Lhee_CPNE = np.array(rep_CPNE.sel(channel='LHEE', axis=['x','y','z']))[:,first_index_CPNE:last_index_CPNE]
+Rhee_CPNE = np.array(rep_CPNE.sel(channel='RHEE', axis=['x','y','z']))[:,first_index_CPNE:last_index_CPNE]
+rol_D_CPNE = np.array(rep_CPNE.sel(channel='DROITE', axis=['x','y','z'])) 
+rol_G_CPNE = np.array(rep_CPNE.sel(channel='GAUCHE', axis=['x','y','z']))
+rol_av_CPNE = np.array(rep_CPNE.sel(channel='AVANT', axis=['x','y','z']))
+rol_ar_CPNE = np.array(rep_CPNE.sel(channel='ARRIERE', axis=['x','y','z']))
+
+# pas cut tout de suite donnÃ©e bosu car doit avoir rÃ©fÃ©rence sans personne dessus (cf position centre bosu)
+
+# RÃ©cupÃ©ration Markers CP
+
+Rwra_CP = np.array(rep_CP.sel(channel='RWRA', axis=['x','y','z']))[:,first_index_CP:last_index_CP]
+Rrad_CP = np.array(rep_CP.sel(channel='RRAD', axis=['x','y','z']))[:,first_index_CP:last_index_CP]
+Rsho_CP = np.array(rep_CP.sel(channel='RSHO', axis=['x','y','z']))[:,first_index_CP:last_index_CP]
+Lwra_CP = np.array(rep_CP.sel(channel='LWRA', axis=['x','y','z']))[:,first_index_CP:last_index_CP]
+Lrad_CP = np.array(rep_CP.sel(channel='LRAD', axis=['x','y','z']))[:,first_index_CP:last_index_CP]
+Lsho_CP = np.array(rep_CP.sel(channel='LSHO', axis=['x','y','z']))[:,first_index_CP:last_index_CP]
+Rwrb_CP = np.array(rep_CP.sel(channel='RWRB', axis=['x','y','z']))[:,first_index_CP:last_index_CP]
+Rhum_CP = np.array(rep_CP.sel(channel='RHUM', axis=['x','y','z']))[:,first_index_CP:last_index_CP]
+Lwrb_CP = np.array(rep_CP.sel(channel='LWRB', axis=['x','y','z']))[:,first_index_CP:last_index_CP]
+Lhum_CP = np.array(rep_CP.sel(channel='LHUM', axis=['x','y','z']))[:,first_index_CP:last_index_CP]
+C7_CP = np.array(rep_CP.sel(channel='C7', axis=['x','y','z']))[:,first_index_CP:last_index_CP]
+Clav_CP = np.array(rep_CP.sel(channel='CLAV', axis=['x','y','z']))[:,first_index_CP:last_index_CP]
+Rfwt_CP = np.array(rep_CP.sel(channel='RFWT', axis=['x','y','z']))[:,first_index_CP:last_index_CP]
+Lfwt_CP = np.array(rep_CP.sel(channel='LFWT', axis=['x','y','z']))[:,first_index_CP:last_index_CP]
+Lbwt_CP = np.array(rep_CP.sel(channel='LBWT', axis=['x','y','z']))[:,first_index_CP:last_index_CP]
+Rbwt_CP = np.array(rep_CP.sel(channel='RBWT', axis=['x','y','z']))[:,first_index_CP:last_index_CP]
+Rkne_CP = np.array(rep_CP.sel(channel='RKNE', axis=['x','y','z']))[:,first_index_CP:last_index_CP]
+Rkni_CP = np.array(rep_CP.sel(channel='RKNI', axis=['x','y','z']))[:,first_index_CP:last_index_CP]
+Lkni_CP = np.array(rep_CP.sel(channel='LKNI', axis=['x','y','z']))[:,first_index_CP:last_index_CP]
+Lkne_CP = np.array(rep_CP.sel(channel='LKNE', axis=['x','y','z']))[:,first_index_CP:last_index_CP]
+Rane_CP = np.array(rep_CP.sel(channel='RANE', axis=['x','y','z']))[:,first_index_CP:last_index_CP]
+Lane_CP = np.array(rep_CP.sel(channel='LANE', axis=['x','y','z']))[:,first_index_CP:last_index_CP]
+Rfhd_CP = np.array(rep_CP.sel(channel='RFHD', axis=['x','y','z']))[:,first_index_CP:last_index_CP]
+Lfhd_CP = np.array(rep_CP.sel(channel='LFHD', axis=['x','y','z']))[:,first_index_CP:last_index_CP]
+Lbhd_CP = np.array(rep_CP.sel(channel='LBHD', axis=['x','y','z']))[:,first_index_CP:last_index_CP]
+Rbhd_CP = np.array(rep_CP.sel(channel='RBHD', axis=['x','y','z']))[:,first_index_CP:last_index_CP]
+Rtoe_CP = np.array(rep_CP.sel(channel='RTOE', axis=['x','y','z']))[:,first_index_CP:last_index_CP]
+Ltoe_CP = np.array(rep_CP.sel(channel='LTOE', axis=['x','y','z']))[:,first_index_CP:last_index_CP]
+Lhee_CP = np.array(rep_CP.sel(channel='LHEE', axis=['x','y','z']))[:,first_index_CP:last_index_CP]
+Rhee_CP = np.array(rep_CP.sel(channel='RHEE', axis=['x','y','z']))[:,first_index_CP:last_index_CP]
+rol_D_CP = np.array(rep_CP.sel(channel='DROITE', axis=['x','y','z']))
+rol_G_CP = np.array(rep_CP.sel(channel='GAUCHE', axis=['x','y','z']))
+rol_av_CP = np.array(rep_CP.sel(channel='AVANT', axis=['x','y','z']))
+rol_ar_CP = np.array(rep_CP.sel(channel='ARRIERE', axis=['x','y','z']))
+
+#%% Position centre bosu
+# Détermination du point central du bosu pour avoir un nouvel origine (plus facile pour comparer)
+nv_origine_CPNE = np.array((rol_D_CPNE[:,0]+rol_G_CPNE[:,0]+rol_av_CPNE[:,0]+rol_ar_CPNE[:,0])/4)
+
+nv_origine_CP = np.array((rol_D_CP[:,0]+rol_G_CP[:,0]+rol_av_CP[:,0]+rol_ar_CP[:,0])/4)
+
+#%% Cut des données bosu et du temps
+rol_D_CPNE = rol_D_CPNE[:,first_index_CPNE:last_index_CPNE]
+rol_G_CPNE = rol_G_CPNE[:,first_index_CPNE:last_index_CPNE]
+rol_av_CPNE = rol_av_CPNE[:,first_index_CPNE:last_index_CPNE]
+rol_ar_CPNE = rol_ar_CPNE[:,first_index_CPNE:last_index_CPNE]
+
+rol_D_CP = rol_D_CP[:,first_index_CP:last_index_CP]
+rol_G_CP = rol_G_CP[:,first_index_CP:last_index_CP]
+rol_av_CP = rol_av_CP[:,first_index_CP:last_index_CP]
+rol_ar_CP = rol_ar_CP[:,first_index_CP:last_index_CP]
+
+time_CP = time_CP[first_index_CP:last_index_CP]
+time_CPNE = time_CPNE[first_index_CPNE:last_index_CPNE]
+
+#%% Position articulations
+# CPNE
+pos_poig_G_CPNE = (Lwra_CPNE + Lwrb_CPNE)/2
+pos_coud_G_CPNE = (Lrad_CPNE + Lhum_CPNE)/2
+pos_épau_G_CPNE = Lsho_CPNE
+pos_hanch_G_CPNE = (Lfwt_CPNE + Lbwt_CPNE)/2
+pos_genoux_G_CPNE = (Lkne_CPNE +Lkni_CPNE )/2
+pos_chev_G_CPNE = (Lane_CPNE) # manque Lani pour centrer > approximation ?
+pos_poig_D_CPNE = (Rwra_CPNE + Rwrb_CPNE)/2
+pos_coud_D_CPNE = (Rrad_CPNE + Rhum_CPNE)/2
+pos_épau_D_CPNE = Rsho_CPNE
+pos_hanch_D_CPNE = (Rfwt_CPNE + Rbwt_CPNE)/2
+pos_genoux_D_CPNE = (Rkne_CPNE + Rkni_CPNE )/2
+pos_chev_D_CPNE = (Rane_CPNE) # manque Rani pour centrer > approximation ?
+pos_tete_CPNE = (Rfhd_CPNE + Lfhd_CPNE + Rbhd_CPNE + Lbhd_CPNE)/4
+pos_bassin_CPNE = (Lfwt_CPNE + Lbwt_CPNE + Rfwt_CPNE + Rbwt_CPNE)/4
+
+#CP
+pos_poig_G_CP = (Lwra_CP + Lwrb_CP)/2
+pos_coud_G_CP = (Lrad_CP + Lhum_CP)/2
+pos_épau_G_CP = Lsho_CP
+pos_hanch_G_CP = (Lfwt_CP + Lbwt_CP)/2
+pos_genoux_G_CP = (Lkne_CP +Lkni_CP )/2
+pos_chev_G_CP = (Lane_CP) # manque Lani pour centrer > approximation ?
+pos_poig_D_CP = (Rwra_CP + Rwrb_CP)/2
+pos_coud_D_CP = (Rrad_CP + Rhum_CP)/2
+pos_épau_D_CP = Rsho_CP
+pos_hanch_D_CP = (Rfwt_CP + Rbwt_CP)/2
+pos_genoux_D_CP = (Rkne_CP + Rkni_CP )/2
+pos_chev_D_CP = (Rane_CP) # manque Rani pour centrer > approximation ?
+pos_tete_CP = (Rfhd_CP + Lfhd_CP + Rbhd_CP + Lbhd_CP)/4
+pos_bassin_CP = (Lfwt_CP + Lbwt_CP + Rfwt_CP + Rbwt_CP)/4
+
+#%% longueur et orientation segments
+# positif si distal plus à  droite / devant que proximal sinon négatif
+# Pas valeur absolue nécessaire pour avoir orientation bras et déterminer COM
+# CPNE
+av_bras_G_CPNE = (pos_poig_G_CPNE - pos_coud_G_CPNE)
+bras_G_CPNE = (pos_coud_G_CPNE - pos_épau_G_CPNE)
+cuis_G_CPNE = (pos_genoux_G_CPNE - pos_hanch_G_CPNE)
+tib_G_CPNE = (pos_chev_G_CPNE - pos_genoux_G_CPNE)
+av_bras_D_CPNE = (pos_poig_D_CPNE - pos_coud_D_CPNE)
+bras_D_CPNE = (pos_coud_D_CPNE - pos_épau_D_CPNE)
+cuis_D_CPNE = (pos_genoux_D_CPNE - pos_hanch_D_CPNE)
+tib_D_CPNE = (pos_chev_D_CPNE - pos_genoux_D_CPNE)
+tronc_CPNE = (pos_bassin_CPNE - C7_CPNE)
+pied_G_CPNE = (Ltoe_CPNE - Lhee_CPNE)
+pied_D_CPNE = (Rtoe_CPNE - Rhee_CPNE)
+
+#CP
+av_bras_G_CP = (pos_poig_G_CP - pos_coud_G_CP)
+bras_G_CP = (pos_coud_G_CP - pos_épau_G_CP)
+cuis_G_CP = (pos_genoux_G_CP - pos_hanch_G_CP)
+tib_G_CP = (pos_chev_G_CP - pos_genoux_G_CP)
+av_bras_D_CP = (pos_poig_D_CP - pos_coud_D_CP)
+bras_D_CP = (pos_coud_D_CP - pos_épau_D_CP)
+cuis_D_CP = (pos_genoux_D_CP - pos_hanch_D_CP)
+tib_D_CP = (pos_chev_D_CP - pos_genoux_D_CP)
+tronc_CP = (pos_bassin_CP - C7_CP)
+pied_G_CP = (Ltoe_CP - Lhee_CP)
+pied_D_CP = (Rtoe_CP - Rhee_CP)
+
+
+#%% Position COM
+#CPNE
+# com = (longueur du segment * %longueur d'aprÃ¨s table antropomÃ©thrique) + point proximal
+
+com_av_bras_G_CPNE = (av_bras_G_CPNE * 0.4574) + pos_coud_G_CPNE
+com_bras_G_CPNE = (bras_G_CPNE * 0.5772) + pos_épau_G_CPNE
+com_cuis_G_CPNE = (cuis_G_CPNE * 0.4095) + pos_hanch_G_CPNE
+com_tib_G_CPNE = (tib_G_CPNE * 0.4459) + pos_genoux_G_CPNE
+com_av_bras_D_CPNE = (av_bras_D_CPNE * 0.4574) + pos_coud_D_CPNE
+com_bras_D_CPNE = (bras_D_CPNE * 0.5772) + pos_épau_D_CPNE
+com_cuis_D_CPNE = (cuis_D_CPNE * 0.4095) + pos_hanch_D_CPNE
+com_tib_D_CPNE = (tib_D_CPNE * 0.4459) + pos_genoux_D_CPNE
+com_tronc_CPNE = (tronc_CPNE * 0.5138)+ C7_CPNE
+com_tete_CPNE = pos_tete_CPNE
+# manque Lcar et Rcar pour com main
+# approximation table antropométrique : L main = 32.0565 % L bras
+# com main = 79% longueur main = 25.3246 % longueur bras
+# com main = 125.3246 % longueur bras + pos coude
+# uniquement si bras et main tendu dans le même axe (consignes donnée a jude)
+# approximation grossière mais avec peu incidence sur CG global car masse mains peu importante
+com_main_G_CPNE = (av_bras_G_CPNE * 1.2532) + pos_coud_G_CPNE
+com_main_D_CPNE = (av_bras_D_CPNE * 1.2532) + pos_coud_D_CPNE
+com_pied_G_CPNE = (pied_G_CPNE *0.4415)+ Lhee_CPNE
+com_pied_D_CPNE = (pied_D_CPNE *0.4415)+ Rhee_CPNE
+
+# CP
+com_av_bras_G_CP = (av_bras_G_CP * 0.4574) + pos_coud_G_CP
+com_bras_G_CP = (bras_G_CP * 0.5772) + pos_épau_G_CP
+com_cuis_G_CP = (cuis_G_CP * 0.4095) + pos_hanch_G_CP
+com_tib_G_CP = (tib_G_CP * 0.4459) + pos_genoux_G_CP
+com_av_bras_D_CP = (av_bras_D_CP * 0.4574) + pos_coud_D_CP
+com_bras_D_CP = (bras_D_CP * 0.5772) + pos_épau_D_CP
+com_cuis_D_CP = (cuis_D_CP * 0.4095) + pos_hanch_D_CP
+com_tib_D_CP = (tib_D_CP * 0.4459) + pos_genoux_D_CP
+com_tronc_CP = (tronc_CP * 0.5138)+ C7_CP
+com_tete_CP = pos_tete_CP
+com_main_G_CP = (av_bras_G_CP * 1.2532) + pos_coud_G_CP
+com_main_D_CP = (av_bras_D_CP * 1.2532) + pos_coud_D_CP
+com_pied_G_CP = (pied_G_CP *0.4415)+ Lhee_CP
+com_pied_D_CP = (pied_D_CP *0.4415)+ Rhee_CP
+
+
+#%% CG
+# somme des com des segments * le pourcentage de masse
+# somme % masse = 1 donc pas besoin de diviser le tout
+#CPNE
+CG_CPNE = ((com_av_bras_G_CPNE + com_av_bras_D_CPNE)*2*0.0162)\
+    +((com_av_bras_G_CPNE + com_av_bras_D_CPNE)*2*0.0271)\
+    +((com_cuis_G_CPNE + com_cuis_D_CPNE)*2*0.1416)\
+    +((com_tib_G_CPNE + com_tib_D_CPNE)*2*0.0433)\
+    +((com_main_G_CPNE + com_main_D_CPNE)*2*0.0061)\
+    +((com_pied_G_CPNE + com_pied_D_CPNE)*2*0.0137)\
+    + (com_tronc_CPNE * 0.4346) + (com_tete_CPNE * 0.0694)
+    
+CdG_CPNE = CG_CPNE - nv_origine_CPNE[:, np.newaxis]  # origine au centre bosu = gauche et avant positif
+
+vit_CdG_CPNE = np.diff(CdG_CPNE)* fréquence_CPNE
+accel_CdG_CPNE = np.diff(vit_CdG_CPNE)* fréquence_CPNE
+
+#CP
+CG_CP = ((com_av_bras_G_CP + com_av_bras_D_CP)*2*0.0162)\
+    +((com_av_bras_G_CP + com_av_bras_D_CP)*2*0.0271)\
+    +((com_cuis_G_CP + com_cuis_D_CP)*2*0.1416)\
+    +((com_tib_G_CP + com_tib_D_CP)*2*0.0433)\
+    +((com_main_G_CP + com_main_D_CP)*2*0.0061)\
+    +((com_pied_G_CP + com_pied_D_CP)*2*0.0137)\
+    + (com_tronc_CP * 0.4346) + (com_tete_CP * 0.0694)
+    
+CdG_CP = CG_CP - nv_origine_CP[:, np.newaxis]  # origine au centre bosu = gauche et avant positif
+
+vit_CdG_CP = np.diff(CdG_CP)* fréquence_CP
+accel_CdG_CP = np.diff(vit_CdG_CP)* fréquence_CP
+
+
+#%% Angle bosu
+# CPNE
+larg_bosu_CPNE = [abs(rol_D_CPNE[1]-rol_G_CPNE[1])] # distance latÃ©ral entre les 2 points > axes y
+long_bosu_CPNE = [abs(rol_av_CPNE[0]-rol_ar_CPNE[0])] # distance frontal entre les 2 points > axes x
+
+delta_h_larg_CPNE = (rol_G_CPNE[2]-rol_D_CPNE[2]) # positif si penche vers la gauche
+delta_h_long_CPNE = (rol_av_CPNE[2]-rol_ar_CPNE[2]) # positif si penche vers l'avant
+
+pente_lat_CPNE = ( delta_h_larg_CPNE / larg_bosu_CPNE) # angle en %
+pente_front_CPNE = (delta_h_long_CPNE /long_bosu_CPNE )
+
+angle_lat_CPNE = np.arctan(pente_lat_CPNE) # angle en rad
+angle_front_CPNE = np.arctan(pente_front_CPNE)
+
+# CP
+larg_bosu_CP = [abs(rol_D_CP[1]-rol_G_CP[1])] # distance latÃ©ral entre les 2 points > axes y
+long_bosu_CP = [abs(rol_av_CP[0]-rol_ar_CP[0])] # distance frontal entre les 2 points > axes x
+
+delta_h_larg_CP = (rol_G_CP[2]- rol_D_CP[2]) # positif si penche vers la gauche
+delta_h_long_CP = (rol_av_CP[2]-rol_ar_CP[2]) # positif si penche vers l'avant
+
+pente_lat_CP = ( delta_h_larg_CP / larg_bosu_CP) # angle en %
+pente_front_CP = (delta_h_long_CP /long_bosu_CP )
+
+
+angle_lat_CP = np.arctan(pente_lat_CP) # angle en rad
+angle_front_CP = np.arctan(pente_front_CP)
+
+#%% Vitesse angulaire
+# CPNE
+angle_cheville_G_CPNE = angle_radiant(pied_G_CPNE, tib_G_CPNE)
+angle_genoux_G_CPNE = angle_radiant(cuis_G_CPNE , tib_G_CPNE)
+angle_hanche_G_CPNE = angle_radiant(cuis_G_CPNE, tronc_CPNE)
+angle_épaule_G_CPNE = angle_radiant(tronc_CPNE, bras_G_CPNE)
+angle_cheville_D_CPNE = angle_radiant(pied_D_CPNE, tib_D_CPNE)
+angle_genoux_D_CPNE = angle_radiant(cuis_D_CPNE , tib_D_CPNE)
+angle_hanche_D_CPNE = angle_radiant(cuis_D_CPNE, tronc_CPNE)
+angle_épaule_D_CPNE = angle_radiant(tronc_CPNE, bras_D_CPNE)
+
+vit_ang_chev_G_CPNE = np.diff(angle_cheville_G_CPNE)*fréquence_CPNE
+vit_ang_gen_G_CPNE = np.diff(angle_genoux_G_CPNE)*fréquence_CPNE
+vit_ang_hanc_G_CPNE = np.diff(angle_hanche_G_CPNE)*fréquence_CPNE
+vit_ang_épau_G_CPNE = np.diff(angle_épaule_G_CPNE)*fréquence_CPNE
+vit_ang_chev_D_CPNE = np.diff(angle_cheville_D_CPNE)*fréquence_CPNE
+vit_ang_gen_D_CPNE = np.diff(angle_genoux_D_CPNE)*fréquence_CPNE
+vit_ang_hanc_D_CPNE =np.diff(angle_hanche_D_CPNE)*fréquence_CPNE
+vit_ang_épau_D_CPNE = np.diff(angle_épaule_D_CPNE)*fréquence_CPNE
+
+# CP
+angle_cheville_G_CP = angle_radiant(pied_G_CP, tib_G_CP)
+angle_genoux_G_CP = angle_radiant(cuis_G_CP , tib_G_CP)
+angle_hanche_G_CP = angle_radiant(cuis_G_CP, tronc_CP)
+angle_épaule_G_CP = angle_radiant(tronc_CP, bras_G_CP)
+angle_cheville_D_CP = angle_radiant(pied_D_CP, tib_D_CP)
+angle_genoux_D_CP = angle_radiant(cuis_D_CP , tib_D_CP)
+angle_hanche_D_CP = angle_radiant(cuis_D_CP, tronc_CP)
+angle_épaule_D_CP = angle_radiant(tronc_CP, bras_D_CP)
+
+vit_ang_chev_G_CP = np.diff(angle_cheville_G_CP)*fréquence_CP
+vit_ang_gen_G_CP = np.diff(angle_genoux_G_CP)*fréquence_CP
+vit_ang_hanc_G_CP = np.diff(angle_hanche_G_CP)*fréquence_CP
+vit_ang_épau_G_CP = np.diff(angle_épaule_G_CP)*fréquence_CP
+vit_ang_chev_D_CP = np.diff(angle_cheville_D_CP)*fréquence_CP
+vit_ang_gen_D_CP = np.diff(angle_genoux_D_CP)*fréquence_CP
+vit_ang_hanc_D_CP =np.diff(angle_hanche_D_CP)*fréquence_CP
+vit_ang_épau_D_CP = np.diff(angle_épaule_D_CP)*fréquence_CP
+
+
+#%% graphique CdG
+
+fig, ax = plt.subplots(3,2,sharex=True, figsize=(8, 10))
+
+ax[0,0].plot(time_CPNE,CdG_CPNE[0],c='blue' ,label = "CPNE") 
+ax[0,0].plot(time_CP,CdG_CP[0],c='orange', label = "CP") 
+ax[0,0].legend()
+ax[0,0].set_xlabel('Temps (s)')
+ax[0,0].set_ylabel('CdG X position')
+
+ax[1,0].plot(time_CPNE[1:],vit_CdG_CPNE [0],c='blue' ,label = "CPNE") 
+ax[1,0].plot(time_CP[1:],vit_CdG_CP[0],c='orange', label = "CP") 
+ax[1,0].legend()
+ax[1,0].set_xlabel('Temps (s)')
+ax[1,0].set_ylabel('CdG X vitesse')
+
+ax[2,0].plot(time_CPNE[2:],accel_CdG_CPNE[0],c='blue' ,label = "CPNE") 
+ax[2,0].plot(time_CP[2:],accel_CdG_CP[0],c='orange', label = "CP") 
+ax[2,0].legend()
+ax[2,0].set_xlabel('Temps (s)')
+ax[2,0].set_ylabel('CdG X accéleration')
+
+ax[0,1].plot(time_CPNE,CdG_CPNE[1],c='blue' ,label = "CPNE") 
+ax[0,1].plot(time_CP,CdG_CP[1],c='orange', label = "CP") 
+ax[0,1].legend()
+ax[0,1].set_xlabel('Temps (s)')
+ax[0,1].set_ylabel('CdG Y position')
+
+ax[1,1].plot(time_CPNE[1:],vit_CdG_CPNE [1],c='blue' ,label = "CPNE") 
+ax[1,1].plot(time_CP[1:],vit_CdG_CP[1],c='orange', label = "CP") 
+ax[1,1].legend()
+ax[1,1].set_xlabel('Temps (s)')
+ax[1,1].set_ylabel('CdG Y vitesse')
+
+ax[2,1].plot(time_CPNE[2:],accel_CdG_CPNE[1],c='blue' ,label = "CPNE") 
+ax[2,1].plot(time_CP[2:],accel_CdG_CP[1],c='orange', label = "CP") 
+ax[2,1].legend()
+ax[2,1].set_xlabel('Temps (s)')
+ax[2,1].set_ylabel('CdG Y accéleration')
+
+fig.suptitle('CdG cinématique', fontsize=16)
+plt.tight_layout() #pour ajuster les cheuvauchements entre les graphiques
+plt.show()
+
+#%% Comparaison déplacement CG et bosu
+# Pour voir si anticipation ou non
+
+fig, az = plt.subplots(2,2,sharex=True, figsize=(8, 10))
+
+#CPNE
+az[0,0].plot(time_CPNE,CdG_CPNE[1],c='blue' ,label = "CdG")  
+az[0,0].legend()
+az[0,0].set_xlabel('Temps (s)')
+az[0,0].set_ylabel('CdG CPNE position')
+
+# CrÃ©ation d'un deuxiÃ¨me axe ordonnÃ© partageant le mÃªme axe x
+az2 = az[0,0].twinx()
+az2.plot(time_CPNE, angle_lat_CPNE[0],c='orange', label = "Bosu" )
+az2.set_ylabel('Angle latéral Bosu', )  # LÃ©gende de l'axe des ordonnÃ©es
+az2.legend()
+
+az[1,0].plot(time_CPNE,CdG_CPNE[0],c='blue' ,label = "CdG") 
+az[1,0].legend()
+az[1,0].set_xlabel('Temps (s)')
+az[1,0].set_ylabel('CdG CPNE position')
+
+# Création d'un deuxiÃ¨me axe ordonnÃ© partageant le mÃªme axe x
+az3 = az[1,0].twinx()
+az3.plot(time_CPNE, angle_front_CPNE[0],c='orange', label = "Bosu" )
+az3.set_ylabel('Angle frontal Bosu', )  # LÃ©gende de l'axe des ordonnÃ©es
+az3.legend()
+
+#CP
+az[0,1].plot(time_CP,CdG_CP[1],c='blue' ,label = "CdG")  
+az[0,1].legend()
+az[0,1].set_xlabel('Temps (s)')
+az[0,1].set_ylabel('CdG CP position')
+
+# Création d'un deuxiÃ¨me axe ordonnÃ© partageant le mÃªme axe x
+az4 = az[0,1].twinx()
+az4.plot(time_CP, angle_lat_CP[0],c='orange', label = "Bosu" )
+az4.set_ylabel('angle latéral Bosu', )  # LÃ©gende de l'axe des ordonnées
+az4.legend()
+
+az[1,1].plot(time_CP,CdG_CP[0],c='blue' ,label = "CdG") 
+az[1,1].legend()
+az[1,1].set_xlabel('Temps (s)')
+az[1,1].set_ylabel('CdG CP position')
+
+# CrÃ©ation d'un deuxiÃ¨me axe ordonnÃ© partageant le mÃªme axe x
+az5 = az[1,1].twinx()
+az5.plot(time_CP, angle_front_CP[0],c='orange', label = "Bosu" )
+az5.set_ylabel('Angle frontal Bosu', )  # LÃ©gende de l'axe des ordonnÃ©es
+az5.legend()
+
+fig.suptitle('Temps réaction CdG / Bosu', fontsize=16)
+plt.tight_layout() #pour ajuster les cheuvauchements entre les graphiques
+plt.show()
+
+#%% Graphique comparison vitesse angulaire CPNE et CP
+# PB possible pas mÃªme temps entre CP et CPNE
+
+fig, ay = plt.subplots(4,2,sharex=True, figsize=(8, 10))
+
+ay[0,0].plot(time_CPNE[1:],vit_ang_chev_G_CPNE,c='blue', label = 'CPNE') 
+ay[0,0].plot(time_CP[1:],vit_ang_chev_G_CP,c='red', label = 'CP') 
+ay[0,0].legend()
+ay[0,0].set_xlabel('Temps (s)')
+ay[0,0].set_ylabel('Vitesse angulaire cheville gauche')
+
+ay[0,1].plot(time_CPNE[1:],vit_ang_chev_D_CPNE,c='blue', label = 'CPNE') 
+ay[0,1].plot(time_CP[1:],vit_ang_chev_D_CP,c='red', label = 'CP') 
+ay[0,1].legend()
+ay[0,1].set_xlabel('Temps (s)')
+ay[0,1].set_ylabel('Vitesse angulaire cheville droite')
+
+ay[1,0].plot(time_CPNE[1:],vit_ang_gen_G_CPNE ,c='blue', label = 'CPNE')
+ay[1,0].plot(time_CP[1:],vit_ang_gen_G_CP ,c='red', label = 'CP') 
+ay[1,0].legend()
+ay[1,0].set_xlabel('Temps (s)')
+ay[1,0].set_ylabel('Vitesse angulaire genoux gauche')
+
+ay[1,1].plot(time_CPNE[1:],vit_ang_gen_D_CPNE,c='blue', label= 'CPNE')
+ay[1,1].plot(time_CP[1:],vit_ang_gen_D_CP,c='red', label= 'CP') 
+ay[1,1].legend()
+ay[1,1].set_xlabel('Temps (s)')
+ay[1,1].set_ylabel('Vitesse angulaire genoux droit')
+
+ay[2,0].plot(time_CPNE[1:],vit_ang_hanc_G_CPNE ,c='blue', label = 'CPNE')
+ay[2,0].plot(time_CP[1:],vit_ang_hanc_G_CP ,c='red', label = 'CP')
+ay[2,0].legend() 
+ay[2,0].set_xlabel('Temps (s)')
+ay[2,0].set_ylabel('Vitesse angulaire hanche gauche')
+
+ay[2,1].plot(time_CPNE[1:],vit_ang_hanc_D_CPNE,c='blue', label = 'CPNE')
+ay[2,1].plot(time_CP[1:],vit_ang_hanc_D_CP,c='red', label = 'CP')
+ay[2,1].legend() 
+ay[2,1].set_xlabel('Temps (s)')
+ay[2,1].set_ylabel('Vitesse angulaire hanche droite')
+
+ay[3,0].plot(time_CPNE[1:],vit_ang_épau_G_CPNE,c='blue', label = 'CPNE')
+ay[3,0].plot(time_CP[1:],vit_ang_épau_G_CP,c='red', label = 'CP')
+ay[3,0].legend()
+ay[3,0].set_xlabel('Temps (s)')
+ay[3,0].set_ylabel('Vitesse angulaire épaule gauche')
+
+ay[3,1].plot(time_CPNE[1:],vit_ang_épau_D_CPNE,c='blue', label = 'CPNE') 
+ay[3,1].plot(time_CP[1:],vit_ang_épau_D_CP,c='red', label = 'CP')
+ay[3,1].legend()
+ay[3,1].set_xlabel('Temps (s)')
+ay[3,1].set_ylabel('Vitesse angulaire épaule droite')
+
+fig.suptitle('Vitesse angulaire articulations', fontsize=16)
+plt.tight_layout() #pour ajuster les cheuvauchements entre les graphiques
+plt.show()
+
+# Problèmes :  
+# Filtrage donnée marche pas > donnée abérante vitesse angulaire qui nique le graph ou juste trop grande
+# Même origine pour les 2 courbes ?
+#Pb visibilité anticipation (tmps trop court pour être visible sur graph)
+# Mise en forme des graph > espacement pour légende / titre ? => utiliser plt.tight_layout()
+# Voie fichier unique pour mon ordi ?
